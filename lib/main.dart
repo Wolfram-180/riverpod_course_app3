@@ -27,14 +27,47 @@ extension OptionalInfixAddition<T extends num> on T? {
   }
 }
 
-class Counter extends StateNotifier<int?> {
-  Counter() : super(null);
-
-  void increment() => state = state == null ? 1 : state + 1;
+enum City {
+  stockholm,
+  paris,
+  tokyo,
 }
 
-final counterProvider = StateNotifierProvider<Counter, int?>(
-  (ref) => Counter(),
+typedef WeatherEmoji = String;
+
+Future<WeatherEmoji> getWeather(City city) {
+  return Future.delayed(
+    const Duration(seconds: 1),
+    () =>
+        {
+          City.stockholm: 'snow',
+          City.paris: 'rainy',
+          City.tokyo: 'sunlight',
+        }[city] ??
+        unknownWeatherEmoji,
+  );
+}
+
+// UI writes to this and reads from this
+final currentCityProvider = StateProvider<City?>(
+  (ref) => null,
+);
+
+const unknownWeatherEmoji = '?';
+
+// UI reads this
+final weatherProvider = FutureProvider<WeatherEmoji>(
+  (ref) {
+    final city = ref.watch(
+      currentCityProvider,
+    );
+
+    if (city != null) {
+      return getWeather(city);
+    } else {
+      return unknownWeatherEmoji;
+    }
+  },
 );
 
 class HomePage extends ConsumerWidget {
@@ -42,30 +75,62 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentWeather = ref.watch(
+      weatherProvider,
+    );
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(appHeader),
+        title: const Text(
+          appHeader,
+        ),
       ),
       body: Center(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            TextButton(
-              onPressed: ref.read(counterProvider.notifier).increment,
-              child: const Text(
-                'Increment counter',
+            currentWeather.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(11.0),
+                child: CircularProgressIndicator(),
               ),
+              data: (data) => Text(
+                data,
+                style: const TextStyle(
+                  fontSize: 40,
+                ),
+              ),
+              error: (error, stackTrace) => const Text('Error...'),
             ),
-            const SizedBox(
-              height: 50,
-            ),
-            Consumer(
-              builder: (context, ref, child) {
-                final count = ref.watch(counterProvider);
-                final text =
-                    count == null ? 'Press the button' : count.toString();
-                return Text(text);
-              },
+            Expanded(
+              child: ListView.builder(
+                itemCount: City.values.length,
+                itemBuilder: (
+                  context,
+                  index,
+                ) {
+                  final city = City.values[index];
+                  final isSelected = city ==
+                      ref.watch(
+                        currentCityProvider,
+                      );
+                  return ListTile(
+                    title: Text(
+                      city.toString(),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(
+                            Icons.check,
+                          )
+                        : null,
+                    onTap: () => ref
+                        .read(
+                          currentCityProvider.notifier,
+                        )
+                        .state = city,
+                  );
+                },
+              ),
             ),
           ],
         ),
